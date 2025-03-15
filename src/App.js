@@ -244,33 +244,39 @@ function CoinPanel({ coin, priceData }) {
       <div className="price">
         {priceData && priceData.data.length > 0 && priceData.data[priceData.data.length - 1] !== null 
           ? `$${priceData.data[priceData.data.length - 1].toFixed(2)}`
-          : "fetching price, please be patient"}
+          : "fetching current price"}
       </div>
       <canvas ref={canvasRef} width="300" height="150"></canvas>
-      <div className="ohlc-data">
+      <div className="ohlc-data" style={{ textAlign: 'center' }}>
         <h3>Open/Close Prices (Last 10 Days)</h3>
         {ohlcLoading ? (
           <p>Loading historical data...</p>
         ) : ohlcAvailable ? (
-          <table>
+          <table style={{ margin: "0 auto" }}>
             <thead>
               <tr>
                 <th>Date</th>
                 <th>Open (USD)</th>
                 <th>Close (USD)</th>
+                <th>Difference</th>
               </tr>
             </thead>
             <tbody>
               {ohlcData.map(candle => {
                 // Each candle is [ time, low, high, open, close, volume ]
                 const [time, low, high, open, close] = candle;
-                // Coinbase timestamps are in seconds
                 const date = new Date(time * 1000).toLocaleDateString();
+                // Calculate the percent difference
+                const diff = ((close - open) / open) * 100;
+                const diffRounded = diff.toFixed(2);
+                // Determine styling based on the difference value
+                const diffStyle = diff < 0 ? { color: 'red' } : diff > 0 ? { color: 'green' } : {};
                 return (
                   <tr key={time}>
                     <td>{date}</td>
                     <td>{open.toFixed(2)}</td>
                     <td>{close.toFixed(2)}</td>
+                    <td style={diffStyle}>{diffRounded}%</td>
                   </tr>
                 );
               })}
