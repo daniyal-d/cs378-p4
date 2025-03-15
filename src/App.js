@@ -19,7 +19,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
 
-  // Fetch the coin price from Coinbase API
+  // Fetch the coin price from Coinbase API (spot price)
   const fetchPrice = (coin) => {
     const coinTicker = coin.ticker.toUpperCase();
     fetch(`https://api.coinbase.com/v2/prices/${coinTicker}-USD/spot`)
@@ -61,7 +61,7 @@ function App() {
     coins.forEach(coin => fetchPrice(coin));
   }, []);
 
-  // Search for coins using CoinGecko API
+  // Search for coins using CoinGecko API (Coinbase doesn't provide a public search endpoint)
   useEffect(() => {
     if (!searchQuery) {
       setSuggestions([]);
@@ -152,11 +152,45 @@ function App() {
   );
 }
 
-// Component for displaying an individual coin’s price and chart
+// Component for displaying an individual coin’s price, live chart, and open/close prices using Coinbase Pro API
 function CoinPanel({ coin, priceData }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
+  const [ohlcData, setOhlcData] = useState([]);
+  const [ohlcLoading, setOhlcLoading] = useState(true);
+  const [ohlcAvailable, setOhlcAvailable] = useState(true);
 
+  // Fetch historical OHLC data from Coinbase Pro API
+  useEffect(() => {
+    setOhlcLoading(true);
+    const end = new Date();
+    const start = new Date(end.getTime() - (10 * 24 * 60 * 60 * 1000)); // last 10 days
+    const startISOString = start.toISOString();
+    const endISOString = end.toISOString();
+    // Coinbase Pro API requires product id in the format: BTC-USD, ETH-USD, etc.
+    const productId = `${coin.ticker}-USD`;
+    fetch(`https://api.exchange.coinbase.com/products/${productId}/candles?start=${startISOString}&end=${endISOString}&granularity=86400`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          // Coinbase returns candles as [ time, low, high, open, close, volume ]
+          // Sort in ascending order by time
+          const sortedData = data.sort((a, b) => a[0] - b[0]);
+          setOhlcData(sortedData);
+          setOhlcAvailable(true);
+        } else {
+          setOhlcAvailable(false);
+        }
+        setOhlcLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching OHLC data:", err);
+        setOhlcAvailable(false);
+        setOhlcLoading(false);
+      });
+  }, [coin.ticker, coin.id]);
+
+  // Set up the Chart.js line chart for live current price data
   useEffect(() => {
     if (canvasRef && canvasRef.current) {
       chartRef.current = new Chart(canvasRef.current, {
@@ -213,6 +247,39 @@ function CoinPanel({ coin, priceData }) {
           : "fetching price, please be patient"}
       </div>
       <canvas ref={canvasRef} width="300" height="150"></canvas>
+      <div className="ohlc-data">
+        <h3>Open/Close Prices (Last 10 Days)</h3>
+        {ohlcLoading ? (
+          <p>Loading historical data...</p>
+        ) : ohlcAvailable ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Open (USD)</th>
+                <th>Close (USD)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ohlcData.map(candle => {
+                // Each candle is [ time, low, high, open, close, volume ]
+                const [time, low, high, open, close] = candle;
+                // Coinbase timestamps are in seconds
+                const date = new Date(time * 1000).toLocaleDateString();
+                return (
+                  <tr key={time}>
+                    <td>{date}</td>
+                    <td>{open.toFixed(2)}</td>
+                    <td>{close.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <p>Historical data not available</p>
+        )}
+      </div>
     </div>
   );
 }
